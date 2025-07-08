@@ -3,11 +3,20 @@ local GeminiAPI = {}
 
 local HttpService = game:GetService("HttpService")
 
-GeminiAPI.API_KEY = "Your API key" -- IMPORTANT: User must replace this
+GeminiAPI.API_KEY = "" -- Will be set by MainPluginScript
 GeminiAPI.API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key="
--- Key will be appended later to allow dynamic changes if needed
+-- Key will be appended later
 
 local MAX_FILE_STRUCTURE_LENGTH = 2000 -- Max length for file structure JSON in prompt
+
+function GeminiAPI.setAPIKey(apiKey)
+	if type(apiKey) == "string" then
+		GeminiAPI.API_KEY = apiKey
+		print("GeminiAPI: API Key set.")
+	else
+		warn("GeminiAPI: Invalid API Key provided.")
+	end
+end
 
 function GeminiAPI.buildPrompt(userPromptText, gameFileStructure)
 	local fileStructureJSON = HttpService:JSONEncode(gameFileStructure)

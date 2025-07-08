@@ -49,6 +49,9 @@ function UI.addBubble(text, isUser, messageType)
 		elseif messageType == "warning" then
 			bubbleColor = WARNING_COLOR
 			textColor = BACKGROUND_COLOR -- Text on yellow warning
+		elseif messageType == "info" then -- Added info type
+			bubbleColor = ACCENT_COLOR -- Or another distinct color like a light blue
+			textColor = Color3.fromRGB(255,255,255)
 		elseif messageType == "thinking" then
 			bubbleColor = SURFACE_COLOR
 			textColor = SUBTLE_TEXT_COLOR
@@ -268,6 +271,18 @@ function UI.createLayout(widgetInstance)
 	titleLabel.Parent = titleBar
 	uiElements.titleLabel = titleLabel
 
+	local settingsButton = Instance.new("TextButton")
+	settingsButton.Name = "SettingsButton"
+	settingsButton.Size = UDim2.new(0, 30, 0, 30) -- Square button for icon
+	settingsButton.Position = UDim2.new(1, -40, 0, 5) -- Position to the right of the title bar
+	settingsButton.Text = "⚙️" -- Gear icon (Unicode)
+	settingsButton.TextSize = 20
+	settingsButton.TextColor3 = TEXT_COLOR
+	settingsButton.BackgroundTransparency = 1
+	settingsButton.Font = Enum.Font.GothamBold
+	settingsButton.Parent = titleBar
+	uiElements.settingsButton = settingsButton
+
 	-- File Explorer (Placeholder - to be implemented later)
 	local fileExplorerFrame = Instance.new("Frame")
 	fileExplorerFrame.Name = "FileExplorerFrame"
@@ -330,7 +345,135 @@ function UI.createLayout(widgetInstance)
 	sendButton.MouseEnter:Connect(function() sendButton.BackgroundColor3 = baseSendColor:Lerp(Color3.new(0,0,0), 0.15) end)
 	sendButton.MouseLeave:Connect(function() sendButton.BackgroundColor3 = baseSendColor end)
 
+	-- Create and store the settings panel
+	UI.createSettingsPanel(mainFrame) -- This will store it in uiElements.settingsPanel
+
+	if uiElements.settingsButton and uiElements.settingsPanel then
+		uiElements.settingsButton.MouseButton1Click:Connect(function()
+			uiElements.settingsPanel.Visible = not uiElements.settingsPanel.Visible
+			if uiElements.settingsPanel.Visible then
+				-- Optional: Adjust layout order or ZIndex if needed to ensure it's on top
+				uiElements.settingsPanel.ZIndex = 10 -- Make sure it's high
+				-- Bring to front (not a direct property, but ZIndex helps, and it's parented to mainFrame)
+			end
+		end)
+	end
+
 	return uiElements -- Return all created key elements
+end
+
+function UI.createSettingsPanel(mainFrame)
+	local settingsPanel = Instance.new("Frame")
+	settingsPanel.Name = "SettingsPanel"
+	settingsPanel.Size = UDim2.new(1, -20, 0, 150) -- Adjust size as needed
+	settingsPanel.Position = UDim2.new(0, 10, 0, 50) -- Position below the title bar
+	settingsPanel.BackgroundColor3 = SURFACE_COLOR
+	settingsPanel.BorderColor3 = ACCENT_COLOR
+	settingsPanel.BorderSizePixel = 1
+	settingsPanel.Visible = false -- Initially hidden
+	settingsPanel.ZIndex = 10 -- Ensure it's above other elements if overlapping
+	settingsPanel.Parent = mainFrame
+	uiElements.settingsPanel = settingsPanel
+
+	local panelCorner = Instance.new("UICorner")
+	panelCorner.CornerRadius = UDim.new(0, 8)
+	panelCorner.Parent = settingsPanel
+
+	local panelLayout = Instance.new("UIListLayout")
+	panelLayout.Padding = UDim.new(0, 10)
+	panelLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	panelLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	panelLayout.Parent = settingsPanel
+
+	local panelPadding = Instance.new("UIPadding")
+	panelPadding.PaddingTop = UDim.new(0, 10)
+	panelPadding.PaddingBottom = UDim.new(0, 10)
+	panelPadding.PaddingLeft = UDim.new(0, 10)
+	panelPadding.PaddingRight = UDim.new(0, 10)
+	panelPadding.Parent = settingsPanel
+
+	-- Gemini API Key Input
+	local apiKeyLabel = Instance.new("TextLabel")
+	apiKeyLabel.Name = "ApiKeyLabel"
+	apiKeyLabel.Size = UDim2.new(1, -20, 0, 20)
+	apiKeyLabel.Text = "Gemini API Key:"
+	apiKeyLabel.TextColor3 = TEXT_COLOR
+	apiKeyLabel.Font = Enum.Font.GothamMedium
+	apiKeyLabel.TextXAlignment = Enum.TextXAlignment.Left
+	apiKeyLabel.BackgroundTransparency = 1
+	apiKeyLabel.LayoutOrder = 1
+	apiKeyLabel.Parent = settingsPanel
+
+	local apiKeyInput = Instance.new("TextBox")
+	apiKeyInput.Name = "ApiKeyInput"
+	apiKeyInput.Size = UDim2.new(1, -20, 0, 30)
+	apiKeyInput.PlaceholderText = "Enter your Gemini API Key"
+	apiKeyInput.TextColor3 = TEXT_COLOR
+	apiKeyInput.BackgroundColor3 = BACKGROUND_COLOR
+	apiKeyInput.Font = Enum.Font.Gotham
+	apiKeyInput.LayoutOrder = 2
+	local apiKeyInputCorner = Instance.new("UICorner"); apiKeyInputCorner.CornerRadius = UDim.new(0,6); apiKeyInputCorner.Parent = apiKeyInput;
+	apiKeyInput.Parent = settingsPanel
+	uiElements.apiKeyInput = apiKeyInput
+
+	-- Auto Approver Toggle
+	local autoApproverLabel = Instance.new("TextLabel")
+	autoApproverLabel.Name = "AutoApproverLabel"
+	autoApproverLabel.Size = UDim2.new(0.7, 0, 0, 20)
+	autoApproverLabel.Text = "Auto Approve Changes:"
+	autoApproverLabel.TextColor3 = TEXT_COLOR
+	autoApproverLabel.Font = Enum.Font.GothamMedium
+	autoApproverLabel.TextXAlignment = Enum.TextXAlignment.Left
+	autoApproverLabel.BackgroundTransparency = 1
+	autoApproverLabel.LayoutOrder = 3
+	--autoApproverLabel.Parent = settingsPanel -- Will be parented to a holder frame
+
+	local autoApproverToggle = Instance.new("TextButton")
+	autoApproverToggle.Name = "AutoApproverToggle"
+	autoApproverToggle.Size = UDim2.new(0.25, 0, 0, 25) -- Smaller button
+	autoApproverToggle.Text = "OFF" -- Initial state
+	autoApproverToggle.TextColor3 = TEXT_COLOR
+	autoApproverToggle.BackgroundColor3 = ERROR_COLOR -- Red for OFF
+	autoApproverToggle.Font = Enum.Font.GothamBold
+	autoApproverToggle.LayoutOrder = 4
+	local toggleCorner = Instance.new("UICorner"); toggleCorner.CornerRadius = UDim.new(0,6); toggleCorner.Parent = autoApproverToggle;
+	--autoApproverToggle.Parent = settingsPanel -- Will be parented to a holder frame
+	uiElements.autoApproverToggle = autoApproverToggle
+	uiElements.autoApproverLabel = autoApproverLabel -- Store label too for convenience
+
+	-- Frame to hold label and toggle side-by-side
+	local toggleHolder = Instance.new("Frame")
+	toggleHolder.Name = "ToggleHolder"
+	toggleHolder.Size = UDim2.new(1, -20, 0, 30)
+	toggleHolder.BackgroundTransparency = 1
+	toggleHolder.LayoutOrder = 3
+	toggleHolder.Parent = settingsPanel
+
+	local toggleHolderLayout = Instance.new("UIListLayout")
+	toggleHolderLayout.FillDirection = Enum.FillDirection.Horizontal
+	toggleHolderLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	toggleHolderLayout.HorizontalAlignment = Enum.HorizontalAlignment.SpaceBetween --This will push them apart
+	toggleHolderLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	toggleHolderLayout.Parent = toggleHolder
+
+	apiKeyLabel.Parent = settingsPanel -- already done
+	apiKeyInput.Parent = settingsPanel -- already done
+
+	autoApproverLabel.Parent = toggleHolder
+	autoApproverToggle.Parent = toggleHolder
+
+	-- Basic toggle visual behavior
+	autoApproverToggle.MouseButton1Click:Connect(function()
+		if autoApproverToggle.Text == "OFF" then
+			autoApproverToggle.Text = "ON"
+			autoApproverToggle.BackgroundColor3 = SUCCESS_COLOR
+		else
+			autoApproverToggle.Text = "OFF"
+			autoApproverToggle.BackgroundColor3 = ERROR_COLOR
+		end
+	end)
+
+	return settingsPanel
 end
 
 return UI
