@@ -1,233 +1,264 @@
--- TaskApplier.lua 
+-- TaskApplier.lua Module Script
 local TaskApplier = {}
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage") -- Example, get services as needed
-local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService") -- For decoding property value strings if necessary (though direct eval is used)
 local ServerScriptService = game:GetService("ServerScriptService")
-local StarterGui = game:GetService("StarterGui")
+local ServerStorage = game:GetService("ServerStorage")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 local StarterPlayer = game:GetService("StarterPlayer")
--- Add other services if they are common targets
+local StarterGui = game:GetService("StarterGui")
+local StarterPack = game:GetService("StarterPack")
+local Lighting = game:GetService("Lighting")
+local SoundService = game:GetService("SoundService")
+local TextChatService = game:GetService("TextChatService")
+-- Add other services as needed
 
--- Require TaskParser for extractScriptCode
-local Modules = script.Parent
-local TaskParser = require(Modules:WaitForChild("TaskParser"))
-
--- Helper: Find instance by location string (path)
-function TaskApplier.findInstanceByPath(pathString)
-	if not pathString or pathString == "" then return nil, "Path string is empty" end
-
-	local pathSegments = {}
-	for segment in string.gmatch(pathString, "[^/]+") do
-		table.insert(pathSegments, segment)
+-- Helper to convert string path like "game.Workspace.MyPart" to an Instance
+local function getInstanceFromPath(pathString)
+	if not pathString or type(pathString) ~= "string" then
+		return nil, "PathString is nil or not a string"
 	end
 
-	if #pathSegments == 0 then return nil, "Path string resulted in no segments" end
+	if not pathString:match("^game%.") then
+		return nil, "PathString must start with 'game.'"
+	end
+
+	local parts = {}
+	for part in pathString:gmatch("([^%.]+)") do
+		table.insert(parts, part)
+	end
+
+	if #parts == 0 or parts[1] ~= "game" then
+		return nil, "Invalid path format or first part is not 'game'"
+	end
 
 	local currentInstance = game
-	local firstSegment = pathSegments[1]
-
-	-- Try GetService first for top-level services
-	local success, service = pcall(game.GetService, game, firstSegment)
-	if success and service then
-		currentInstance = service
-		table.remove(pathSegments, 1)
-	else
-		-- Fallback to common service variables if GetService fails or path doesn't start with a service name
-		local commonServices = {
-			Workspace = Workspace,
-			ReplicatedStorage = ReplicatedStorage,
-			ServerScriptService = ServerScriptService,
-			StarterGui = StarterGui,
-			StarterPlayer = StarterPlayer,
-			ServerStorage = game:GetService("ServerStorage"), -- Ensure it's available
-			Lighting = game:GetService("Lighting"),
-			SoundService = game:GetService("SoundService"),
-			StarterCharacterScripts = StarterPlayer and StarterPlayer:FindFirstChild("StarterCharacterScripts"),
-			StarterPlayerScripts = StarterPlayer and StarterPlayer:FindFirstChild("StarterPlayerScripts")
-		}
-		if commonServices[firstSegment] then
-			currentInstance = commonServices[firstSegment]
-			table.remove(pathSegments, 1)
-		elseif firstSegment == "game" then -- Handle paths like "game/Workspace/Part"
-			table.remove(pathSegments, 1)
-			if #pathSegments == 0 then -- Path was just "game"
-				return game, nil
-			end
-			-- Update firstSegment for the next check if path was "game/ServiceName/..."
-			firstSegment = pathSegments[1]
-			local gameService = game:GetService(firstSegment)
-			if gameService then
-				currentInstance = gameService
-				table.remove(pathSegments,1)
-			elseif commonServices[firstSegment] then
-				currentInstance = commonServices[firstSegment]
-				table.remove(pathSegments,1)
-			else
-				-- Path might be like "game/DirectChildOfGame" which is unusual
-				-- currentInstance remains 'game'
-			end
+	for i = 2, #parts do
+		local partName = parts[i]
+		local foundInstance = currentInstance:FindFirstChild(partName)
+		if not foundInstance then
+			return nil, "Could not find instance '" .. partName .. "' in path '" .. pathString .. "' (under parent '"..currentInstance:GetFullName().."')"
 		end
-	end
-
-	-- If pathSegments is now empty, it means the path was just a service name
-	if #pathSegments == 0 then
-		if currentInstance ~= game then
-			return currentInstance, nil
-		else
-			return nil, "Path resolved to 'game' but needed a service or instance."
-		end
-	end
-
-	for _, segmentName in ipairs(pathSegments) do
-		if currentInstance then
-			currentInstance = currentInstance:FindFirstChild(segmentName)
-			if not currentInstance then
-				return nil, "Segment '" .. segmentName .. "' not found in path '" .. pathString .. "'"
-			end
-		else
-			-- This case should ideally not be reached if previous checks are done right
-			return nil, "Path broken at segment '" .. segmentName .. "' in path '" .. pathString .. "'"
-		end
+		currentInstance = foundInstance
 	end
 	return currentInstance, nil
 end
 
--- Convert string value to actual Roblox type if possible
-function TaskApplier.convertPropertyValue(valueStr)
-	if type(valueStr) ~= "string" then
-		return valueStr -- Return as is if not a string (e.g. already boolean/number from JSON)
-	end
+-- Helper to get the parent instance and the name of the target item from a full path
+local function getParentAndName(fullPath)
+    if not fullPath or not fullPath:match("^game%.[^%.]+%.") then -- e.g. game.Workspace.Item
+        return nil, nil, "Invalid full path format. Must be game.Service.Item... " .. tostring(fullPath)
+    end
+    local match = fullPath:match("^(.*)%.([^%.]+)$")
+    if not match then -- Path might be just game.ServiceName (e.g. game.Workspace)
+         return nil, nil, "Path does not seem to point to an item within a service: " .. fullPath
+    end
 
-	-- Try Vector3
-	local x,y,z = valueStr:match("^Vector3%.new%((%-?%d*%.?%d*),%s*(%-?%d*%.?%d*),%s*(%-?%d*%.?%d*)%)$")
-	if x then return Vector3.new(tonumber(x), tonumber(y), tonumber(z)) end
+    local parentPath = fullPath:match("^(.*)%.")
+    parentPath = parentPath:sub(1, #parentPath -1) -- remove trailing dot
+    local itemName = fullPath:match("([^%.]+)$")
 
-	-- Try Color3
-	local r,g,b = valueStr:match("^Color3%.fromRGB%((%d+),%s*(%d+),%s*(%d+)%)$")
-	if r then return Color3.fromRGB(tonumber(r), tonumber(g), tonumber(b)) end
-	r,g,b = valueStr:match("^Color3%.new%((%d*%.?%d*),%s*(%d*%.?%d*),%s*(%d*%.?%d*)%)$")
-	if r then return Color3.new(tonumber(r), tonumber(g), tonumber(b)) end
-
-	-- Try boolean (string "true" or "false")
-	if valueStr:lower() == "true" then return true end
-	if valueStr:lower() == "false" then return false end
-
-	-- Try number
-	local num = tonumber(valueStr)
-	if num then return num end
-
-	-- Default to string (remove quotes if it's a quoted string from AI)
-	return valueStr:match('^"(.*)"$') or valueStr:match("^'(.*)'$") or valueStr
+    local parentInstance, err = getInstanceFromPath(parentPath)
+    if err then
+        return nil, nil, "Could not get parent instance from path '" .. parentPath .. "': " .. err
+    end
+    return parentInstance, itemName, nil
 end
 
--- Apply properties from a table to an instance
-function TaskApplier.applyProperties(instance, propertiesTable)
-	if not propertiesTable or type(propertiesTable) ~= "table" then return {} end
-	local appliedProps = {}
-	local failedProps = {}
 
-	for propName, propValueInput in pairs(propertiesTable) do
-		local actualValue = TaskApplier.convertPropertyValue(propValueInput)
-		local success, err = pcall(function()
-			instance[propName] = actualValue
-		end)
-		if success then
-			table.insert(appliedProps, propName)
-		else
-			table.insert(failedProps, {name = propName, value = tostring(propValueInput), error = err})
-		end
-	end
-	return appliedProps, failedProps
-end
-
--- Actually apply task to game
--- Returns: success (boolean), message (string)
-function TaskApplier.applyTask(taskData)
-	if not TaskParser then TaskParser = require(script.Parent:FindFirstChild("TaskParser")) end
-	if not TaskParser then return false, "TaskParser module not found." end
-
-	local action = (taskData.action or ""):lower()
-	local parentPath = taskData.location
-	local parentInstance, findError = TaskApplier.findInstanceByPath(parentPath)
-
-	if not parentInstance then
-		return false, "Parent location not found: '" .. tostring(parentPath) .. "'. " .. (findError or "")
+-- Helper to evaluate property values from strings.
+-- This is a simplified and potentially UNSAFE evaluator.
+-- For a production plugin, a proper Lua parser/sandboxed environment would be much safer.
+local function evaluatePropertyValue(valueString, contextInstance)
+	if type(valueString) ~= "string" then
+		return valueString -- Assume it's already a correct type (e.g. boolean, number from JSON)
 	end
 
-	local taskName = taskData.name or "UnnamedTask"
+	-- Simple replacements for Roblox globals (extend as needed)
+	local env = {
+		Vector3 = Vector3,
+		Color3 = Color3,
+		UDim2 = UDim2,
+		UDim = UDim,
+		BrickColor = BrickColor,
+		Enum = Enum,
+		Instance = Instance,
+		game = game, -- Provide game global
+		workspace = Workspace, -- Alias for Workspace
+		script = contextInstance, -- Context for 'script.Parent' etc. if property refers to it
+		print = print,
+		true = true,
+		false = false,
+		nil = nil
+		-- NOTE: Add other necessary globals/functions here
+	}
+    -- Allow numbers directly
+    if tonumber(valueString) then return tonumber(valueString) end
+    -- Allow booleans directly
+    if valueString == "true" then return true end
+    if valueString == "false" then return false end
 
-	if action == "add_script" or action == "add_instance" then
-		local instanceType = taskData.instance_type or (action == "add_script" and "Script" or "Part")
-		local newInstance
-		local createSuccess, createErr = pcall(function() newInstance = Instance.new(instanceType) end)
-		if not createSuccess or not newInstance then
-			return false, "Failed to create instance of type '"..instanceType.."'. Error: "..tostring(createErr)
+
+	-- Attempt to load the string as a Lua chunk.
+	-- Prepend "return " to make it an expression.
+	local func, err = loadstring("return " .. valueString)
+	if not func then
+		-- If loadstring fails, it might be a plain string literal that doesn't need "return"
+		-- or it's an invalid expression. For safety, just return the original string if it looks like one.
+		-- This is a very basic heuristic.
+		if (valueString:sub(1,1) == '"' and valueString:sub(-1,-1) == '"') or
+		   (valueString:sub(1,1) == "'" and valueString:sub(-1,-1) == "'") then
+			return valueString:sub(2, -2) -- Return the content of the string literal
 		end
+        warn("TaskApplier: evaluatePropertyValue: Failed to load value string '" .. valueString .. "' as Lua expression. Error: " .. tostring(err) .. ". Returning as raw string.")
+		return valueString -- Return raw string if load fails and it's not a simple string literal
+	end
 
-		newInstance.Name = taskName
-		if taskData.properties then
-			local _, failedProps = TaskApplier.applyProperties(newInstance, taskData.properties)
-			if taskData.properties.Name then -- Name property might be in properties, prefer that
-				newInstance.Name = TaskApplier.convertPropertyValue(taskData.properties.Name)
-			end
-			if #failedProps > 0 then
-				-- Partial success, but some properties failed. Report this.
-				local failureDetails = ""
-				for _, fp in ipairs(failedProps) do failureDetails = failureDetails .. fp.name .. " (" .. fp.error .. "); " end
-				-- Message can be improved to show this later
-			end
-		end
+	setfenv(func, env) -- Set the environment for the loaded chunk
+	local success, result = pcall(func)
 
-		if action == "add_script" then
-			local code = TaskParser.extractScriptCode(taskData)
-			newInstance.Source = "-- Script generated by AI Vibe Coder ✨ (Zentry)\n" .. code
-		end
-
-		newInstance.Parent = parentInstance
-		return true, "Added '" .. newInstance.Name .. "' (" .. instanceType .. ") to " .. parentInstance:GetFullName()
-
-	elseif action == "update_script" then
-		if not taskData.name then return false, "'name' field missing for update_script on parent " .. parentPath end
-		local targetScript = parentInstance:FindFirstChild(taskData.name)
-		if targetScript and (targetScript:IsA("Script") or targetScript:IsA("LocalScript") or targetScript:IsA("ModuleScript")) then
-			local code = TaskParser.extractScriptCode(taskData)
-			targetScript.Source = code
-			return true, "Script '" .. taskData.name .. "' in " .. parentInstance:GetFullName() .. " updated."
-		else
-			return false, "Could not find script '" .. taskData.name .. "' to update in " .. parentInstance:GetFullName()
-		end
-
-	elseif action == "update_instance" then
-		if not taskData.name then return false, "'name' field missing for update_instance on parent " .. parentPath end
-		local targetInstance = parentInstance:FindFirstChild(taskData.name)
-		if targetInstance then
-			if taskData.properties then
-				local _, failedProps = TaskApplier.applyProperties(targetInstance, taskData.properties)
-				local message = "Instance '" .. taskData.name .. "' in " .. parentInstance:GetFullName() .. " updated."
-				if #failedProps > 0 then
-					message = message .. " Some properties failed to apply."
-				end
-				return true, message
-			else
-				return true, "Instance '" .. taskData.name .. "' found, but no properties provided for update." -- Or consider this a warning/partial success
-			end
-		else
-			return false, "Could not find instance '" .. taskData.name .. "' to update in " .. parentInstance:GetFullName()
-		end
-
-	elseif action == "remove_instance" then
-		if not taskData.name then return false, "'name' field missing for remove_instance on parent " .. parentPath end
-		local targetInstance = parentInstance:FindFirstChild(taskData.name)
-		if targetInstance then
-			targetInstance:Destroy()
-			return true, "Instance '" .. taskData.name .. "' removed from " .. parentInstance:GetFullName()
-		else
-			return false, "Could not find instance '" .. taskData.name .. "' to remove in " .. parentInstance:GetFullName()
-		end
+	if success then
+		return result
 	else
-		return false, "Unknown or unsupported action: '" .. tostring(taskData.action) .. "' for task '" .. taskName .. "'."
+		warn("TaskApplier: evaluatePropertyValue: Failed to execute value string '" .. valueString .. "' as Lua expression. Error: " .. tostring(result) .. ". Returning as raw string.")
+		return valueString -- Return raw string if execution fails
+	end
+end
+
+
+function TaskApplier.applyTask(taskData)
+	if not taskData or not taskData.operation_type then
+		return false, "Invalid task data or missing operation_type."
+	end
+
+	local opType = taskData.operation_type
+	local targetPath = taskData.target_path
+	local itemName = taskData.item_name -- Primarily for CREATE, informational for others
+	local payload = taskData.payload
+
+	print("TaskApplier: Processing task_id '"..tostring(taskData.task_id).."' - operation: " .. opType .. ", target: " .. targetPath)
+
+	if opType == "CREATE_INSTANCE" then
+		local parentInstance, newItemName, err = getParentAndName(targetPath)
+		if err then return false, "CREATE_INSTANCE: " .. err end
+		if not parentInstance then return false, "CREATE_INSTANCE: Parent instance not found for path '" .. targetPath .. "'" end
+        if newItemName ~= itemName then
+            warn("TaskApplier: CREATE_INSTANCE item_name ('"..itemName.."') mismatch with name from target_path ('"..newItemName.."'). Using item_name from payload or task.")
+            newItemName = itemName -- Prioritize task's item_name
+        end
+
+		if parentInstance:FindFirstChild(newItemName) then
+			return false, "CREATE_INSTANCE: Item '" .. newItemName .. "' already exists in '" .. parentInstance:GetFullName() .. "'."
+		end
+		if not payload or not payload.instance_class or not payload.properties then
+			return false, "CREATE_INSTANCE: Invalid payload. Missing instance_class or properties."
+		end
+
+		local newInstance = Instance.new(payload.instance_class)
+		newInstance.Name = newItemName -- Ensure name is set from the consistent source
+
+		for propName, propValueStr in pairs(payload.properties) do
+			if propName ~= "Name" then -- Name is already handled
+				local success, err = pcall(function() newInstance[propName] = evaluatePropertyValue(propValueStr, newInstance) end)
+				if not success then
+					warn("TaskApplier: CREATE_INSTANCE: Failed to set property '" .. propName .. "' on '" .. newItemName .. "'. Error: " .. err)
+                    -- Optionally, return false here or collect errors
+				end
+			end
+		end
+		newInstance.Parent = parentInstance
+		return true, "Instance '" .. newItemName .. "' of type '" .. payload.instance_class .. "' created at '" .. parentInstance:GetFullName() .. "'."
+
+	elseif opType == "CREATE_SCRIPT" then
+		local parentInstance, newScriptName, err = getParentAndName(targetPath)
+		if err then return false, "CREATE_SCRIPT: " .. err end
+        if not parentInstance then return false, "CREATE_SCRIPT: Parent instance not found for path '" .. targetPath .. "'" end
+        if newScriptName ~= itemName then
+            warn("TaskApplier: CREATE_SCRIPT item_name ('"..itemName.."') mismatch with name from target_path ('"..newScriptName.."'). Using item_name from payload or task.")
+            newScriptName = itemName -- Prioritize task's item_name
+        end
+
+		if parentInstance:FindFirstChild(newScriptName) then
+			return false, "CREATE_SCRIPT: Script '" .. newScriptName .. "' already exists in '" .. parentInstance:GetFullName() .. "'."
+		end
+		if not payload or not payload.script_type or payload.source_code == nil then
+			return false, "CREATE_SCRIPT: Invalid payload. Missing script_type or source_code."
+		end
+
+		local newScript = Instance.new(payload.script_type)
+		newScript.Name = newScriptName
+		newScript.Source = payload.source_code
+
+        if payload.properties then
+            for propName, propValueStr in pairs(payload.properties) do
+                if propName ~= "Name" then -- Name is already handled
+                    local success, errProp = pcall(function() newScript[propName] = evaluatePropertyValue(propValueStr, newScript) end)
+                    if not success then
+                        warn("TaskApplier: CREATE_SCRIPT: Failed to set property '" .. propName .. "' on '" .. newScriptName .. "'. Error: " .. errProp)
+                    end
+                end
+            end
+        end
+
+		newScript.Parent = parentInstance
+		return true, "Script '" .. newScriptName .. "' of type '" .. payload.script_type .. "' created at '" .. parentInstance:GetFullName() .. "'."
+
+	elseif opType == "UPDATE_INSTANCE" then
+		local instance, err = getInstanceFromPath(targetPath)
+		if err then return false, "UPDATE_INSTANCE: " .. err end
+		if not instance then return false, "UPDATE_INSTANCE: Instance not found at path '" .. targetPath .. "'." end
+
+		if not payload or not payload.properties_to_change or next(payload.properties_to_change) == nil then
+			return false, "UPDATE_INSTANCE: Invalid payload. Missing or empty properties_to_change."
+		end
+
+        local changesApplied = 0
+		for propName, propValueStr in pairs(payload.properties_to_change) do
+            if propName == "Name" and instance.Name ~= propValueStr then
+                -- TODO: Handle renaming carefully, check if new name conflicts in parent
+                -- For now, allow direct name change if explicitly provided
+                 warn("TaskApplier: UPDATE_INSTANCE attempting to change Name property for '"..targetPath.."' to '"..propValueStr.."'. This might have side effects if not handled carefully by AI.")
+            end
+			local success, errSet = pcall(function() instance[propName] = evaluatePropertyValue(propValueStr, instance) end)
+			if not success then
+				warn("TaskApplier: UPDATE_INSTANCE: Failed to set property '" .. propName .. "' on '" .. targetPath .. "'. Error: " .. errSet)
+                -- Optionally, return false here or collect errors
+			else
+                changesApplied = changesApplied + 1
+            end
+		end
+		return true, "Instance '" .. targetPath .. "' updated. ("..changesApplied.." properties attempted)"
+
+	elseif opType == "UPDATE_SCRIPT" then
+		local scriptInstance, err = getInstanceFromPath(targetPath)
+		if err then return false, "UPDATE_SCRIPT: " .. err end
+		if not scriptInstance then return false, "UPDATE_SCRIPT: Script not found at path '" .. targetPath .. "'." end
+		if not scriptInstance:IsA("BaseScript") then return false, "UPDATE_SCRIPT: Instance at '" .. targetPath .. "' is not a script (found " .. scriptInstance.ClassName .. ")." end
+
+		if not payload or payload.new_source_code == nil or payload.update_strategy ~= "REPLACE_CONTENT" then
+			return false, "UPDATE_SCRIPT: Invalid payload. Missing new_source_code or incorrect update_strategy."
+		end
+
+		scriptInstance.Source = payload.new_source_code
+		return true, "Script '" .. targetPath .. "' updated."
+
+	elseif opType == "REMOVE_ITEM" then
+		local instance, err = getInstanceFromPath(targetPath)
+		if err then return false, "REMOVE_ITEM: " .. err end -- Error finding, likely means it doesn't exist as expected
+		if not instance then
+            -- This case should ideally be caught by AI's analysis.
+            -- If AI still generates REMOVE for non-existent, treat as "success" (idempotency) or specific warning.
+			return true, "REMOVE_ITEM: Item at path '" .. targetPath .. "' not found. Assumed already removed or path incorrect."
+		end
+        if instance == game then return false, "REMOVE_ITEM: Cannot remove the 'game' instance." end
+        -- Add more guards for essential services if needed
+
+		instance:Destroy()
+		return true, "Item '" .. targetPath .. "' removed."
+	else
+		return false, "Unknown operation_type: " .. opType
 	end
 end
 
 return TaskApplier
-

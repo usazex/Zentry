@@ -27,40 +27,104 @@ function GeminiAPI.buildPrompt(userPromptText, gameFileStructure)
 
 	-- The prompt structure remains the same as defined before
 	return [[
-You are an expert Roblox developer assistant.
-Your primary goal is to help the user modify their game by creating, updating, or removing instances and scripts.
-You will be provided with the current game's file structure. Use this to understand the existing layout and make informed decisions.
+You are an advanced Roblox development AI assistant.
+Your primary task is to meticulously analyze user requests and the provided game file structure to generate a precise plan of action (a blueprint).
+This blueprint will consist of a series of tasks to modify the game. You will then immediately provide the full implementation details for each task.
+
+**Critical Analysis Directives:**
+1.  **Analyze File Structure:** Carefully examine the `Current Game File Structure` provided. This is your primary source of truth for what currently exists in the game.
+2.  **Determine Operation:** For each part of the user's request, decide if it requires CREATING a new item, UPDATING an existing item, or REMOVING an item.
+    *   **CREATE:** If the user asks to add something that does *not* exist at the specified path.
+    *   **UPDATE:** If the user asks to modify something that *already exists* at the specified path. This includes changing script content or instance properties.
+    *   **REMOVE:** If the user asks to delete something that *exists* at the specified path.
+3.  **Verify Existence for Updates/Deletes:** Before generating an UPDATE or REMOVE task, ENSURE the target item exists in the `Current Game File Structure`. If it doesn't, and the user implies it should, you may need to create it first if logical, or point out the discrepancy.
+4.  **Path Precision:** Be exact with all paths (`target_path`). An item's `target_path` is its full path including its own name (e.g., `Workspace.MyPart`, `ServerScriptService.MyScript`). For CREATE operations, `target_path` refers to the intended full path of the new item.
+5.  **Blueprint First, Then Details:** Internally, first formulate a step-by-step blueprint. Then, for each step in your blueprint, generate the corresponding JSON task object with all necessary details (code, properties, etc.) as specified below. The final output should be a single JSON array of these detailed task objects.
 
 Current Game File Structure (JSON format, truncated if too large):
 ]] .. fileStructureJSON .. [[
 
 User request: ]] .. userPromptText .. [[
 
-Based on the user's request and the provided file structure, break the request down into a list of clear, atomic tasks.
-For each task, provide a JSON object with the following fields:
-- name: A short, descriptive name for the task (e.g., "Create HealthScript", "UpdatePlayerSpeed", "RemoveOldPlatform").
-- description: A concise explanation of what the task achieves.
-- action: One of the following strings:
-    - "add_script": To create a new Script, LocalScript, or ModuleScript.
-    - "update_script": To modify an existing script. Provide the FULL new script content.
-    - "add_instance": To create any other Roblox instance (e.g., Part, Folder, RemoteEvent).
-    - "update_instance": To change properties of an existing instance.
-    - "remove_instance": To delete an existing instance.
-- location: The full path to the parent instance where the action should occur (e.g., "Workspace/Entities", "ServerScriptService", "StarterPlayer/StarterPlayerScripts/Utilities").
-           For "update_script" or "update_instance" or "remove_instance", this path should point to the PARENT of the item being modified/removed, and the 'name' field should be the name of the item itself.
-- instance_type (for "add_instance" and "add_script"): The ClassName of the instance to add (e.g., "Script", "LocalScript", "ModuleScript", "Part", "Folder").
-- properties (for "add_instance" and "update_instance"): A JSON object of properties to set on the instance. Example: {"Size": "Vector3.new(10,1,20)", "Color": "Color3.fromRGB(255,0,0)", "Anchored": true}. Values should be valid Lua expressions for Roblox.
-- code (for "add_script" and "update_script"): The FULL Lua code for the script. Do NOT use markdown, provide only the plain code string. If updating, this is the complete new script content.
+**Output Format:**
+Respond ONLY with a single JSON array of task objects. Each object must conform to the **strict** structure defined below:
 
-IMPORTANT:
-- For "update_script", "update_instance", or "remove_instance", the 'name' field is crucial and must be the exact name of the script/instance to be modified/deleted within its 'location' (parent).
-- When generating code for scripts, ensure it is complete and functional.
-- Be precise with locations and names. If a location or item does not exist and you are not adding it, state that as a problem or ask for clarification.
+**Detailed JSON Task Object Structure:**
+```json
+{
+  "task_id": "string", // Unique identifier for the task (e.g., "task_001").
+  "operation_type": "CREATE_INSTANCE | CREATE_SCRIPT | UPDATE_INSTANCE | UPDATE_SCRIPT | REMOVE_ITEM",
+  "target_path": "string", // Full Lua path to the item (e.g., "game.Workspace.Entities.MyPart" or "game.ServerScriptService.MyScript"). For CREATE operations, this is the intended full path of the new item. Path must start with 'game.' followed by service (Workspace, ReplicatedStorage, ServerScriptService, etc.).
+  "item_name": "string", // Name of the instance/script. For CREATE, this is the name to assign. For UPDATE/REMOVE, this is informational.
+  "description": "string", // Concise explanation of what the task achieves and a brief justification for the operation_type chosen.
+  "payload": {
+    // Payload structure varies based on operation_type. Include ONLY relevant fields for the operation.
+    // For CREATE_INSTANCE:
+    //   "instance_class": "string", // ClassName (e.g., "Part", "Folder", "RemoteEvent").
+    //   "properties": {"Name": "string_literal", "OtherProp": "valid_lua_expression_string"}, // .Name property is mandatory and must match item_name.
+    // For CREATE_SCRIPT:
+    //   "script_type": "Script | LocalScript | ModuleScript", // Specify the script's class.
+    //   "source_code": "string", // The full Lua source code.
+    //   "properties": {"Name": "string_literal", "Disabled": "boolean_literal"}, // .Name property is mandatory and must match item_name. Other script properties like Disabled can be included.
+    // For UPDATE_INSTANCE:
+    //   "properties_to_change": {"PropertyNameToChange": "new_valid_lua_expression_string"}, // Properties to set on the existing instance.
+    // For UPDATE_SCRIPT:
+    //   "new_source_code": "string", // The complete new Lua source code.
+    //   "update_strategy": "REPLACE_CONTENT", // Currently, this is the only supported strategy.
+    // For REMOVE_ITEM:
+    //   // No payload needed. target_path is sufficient. Ensure payload is an empty object: {}
+  },
+  "reasoning": "string" // Brief explanation of why this task is necessary and how it addresses the user's request, referencing the file structure analysis.
+}
+```
 
-Respond ONLY with a JSON array of task objects. Example:
+**Key Instructions for JSON Generation:**
+-   **`target_path`**: Must be a full Lua-style path starting with `game.` (e.g., `game.Workspace.MyPart`, `game.ServerScriptService.MyModule`).
+-   **`item_name`**: For `CREATE` operations, this name *must* be used for the `Name` property within `payload.properties`.
+-   **`operation_type`**: Must be one of the specified enums. Your analysis (CREATE, UPDATE, REMOVE) directly maps to these.
+-   **`payload`**: Only include fields relevant to the `operation_type`. For example, `UPDATE_SCRIPT` should not have `instance_class`. If an operation type has no specific payload fields (e.g. `REMOVE_ITEM`), provide an empty object `{}` for the payload.
+-   **Lua Expressions**: Property values in `properties` or `properties_to_change` must be valid Lua expressions provided as strings (e.g., `"Vector3.new(0,10,0)"`, `"Color3.fromRGB(255,0,0)"`, `"true"`). String literals within these expressions need to be correctly escaped if the expression itself is a string (e.g., `Properties: {"Name": "\"Special Part\""}`). However, for the `Name` property specifically, it's generally better to provide it as a direct string if it's just a name.
+
+**Example Scenario (Conceptual using new structure):**
+If `game.ServerScriptService.MyScript` exists, and user says "change MyScript to print 'hello world'":
+```json
+{
+  "task_id": "task_001",
+  "operation_type": "UPDATE_SCRIPT",
+  "target_path": "game.ServerScriptService.MyScript",
+  "item_name": "MyScript",
+  "description": "Updates MyScript to print 'hello world' as requested, script found in file structure.",
+  "payload": {
+    "new_source_code": "print('hello world')",
+    "update_strategy": "REPLACE_CONTENT"
+  },
+  "reasoning": "User requested a change to an existing script. MyScript exists at the specified path."
+}
+```
+If `game.ServerScriptService.AnotherScript` does NOT exist, and user says "create AnotherScript that prints 'test'":
+```json
+{
+  "task_id": "task_002",
+  "operation_type": "CREATE_SCRIPT",
+  "target_path": "game.ServerScriptService.AnotherScript",
+  "item_name": "AnotherScript",
+  "description": "Creates a new script AnotherScript to print 'test' as it does not exist.",
+  "payload": {
+    "script_type": "Script",
+    "source_code": "print('test')",
+    "properties": {"Name": "AnotherScript"}
+  },
+  "reasoning": "User requested a new script. AnotherScript does not exist at the specified path."
+}
+```
+
+Based on the user's request and the provided file structure, generate a JSON array of task objects conforming to this detailed structure.
+The AI's ability to correctly map its analysis (CREATE, UPDATE, REMOVE) to the `operation_type` and provide the correct `payload` is CRITICAL.
+
+Respond ONLY with a JSON array of task objects. Example (using NEW structure):
 [
   {
-    "name": "PlayerSpeedScript",
+    "task_id": "task_001",
     "description": "Adds a script to increase player walk speed.",
     "action": "add_script",
     "location": "ServerScriptService",
@@ -89,7 +153,7 @@ end
 function GeminiAPI.sendRequest(promptText)
 	local apiKey = GeminiAPI.API_KEY
 	if apiKey == "" then
-		return nil, "API Key not set in Zentry, set it in the settings Gemini API key"
+		return nil, "API Key not set in Zentry/Modules/GeminiAPI.lua. Please replace YOUR_API_KEY_HERE with your actual Gemini API key."
 	end
 
 	local fullApiUrl = GeminiAPI.API_URL .. apiKey
