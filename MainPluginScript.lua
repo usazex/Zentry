@@ -6,8 +6,8 @@ local UserInputService = game:GetService("UserInputService")
 -- Selection, Workspace, etc. will be used by modules directly or passed if necessary
 
 -- Main Plugin Objects
-local toolbar = plugin:CreateToolbar("AI Vibe Coder (Zentry)")
-local pluginButton = toolbar:CreateButton("Open AI Vibe", "Open AI Vibe Coding Plugin", "rbxassetid://75157895955061") -- Using a generic icon
+local toolbar = plugin:CreateToolbar("Zentry V1")
+local pluginButton = toolbar:CreateButton("Zentry", "Open AI Vibe Coding Plugin", "rbxassetid://121735821669264") -- Using a generic icon
 
 local widgetInfo = DockWidgetPluginGuiInfo.new(
 	Enum.InitialDockState.Right,
@@ -30,7 +30,6 @@ local GeminiAPI = require(script.Parent.GeminiAPI)
 local FileScanner = require(script.Parent.FileScanner)
 local TaskParser = require(script.Parent.TaskParser)
 local TaskApplier = require(script.Parent.TaskApplier)
-
 
 -- Create the UI and get references to key elements
 local uiElements = UI.createLayout(pluginWidget)
@@ -232,3 +231,4 @@ end)
 pluginWidget.Enabled = false
 
 print("AI Vibe Coder (Zentry) Loaded. Modules required. UI Created.")
+
