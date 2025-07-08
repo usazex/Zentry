@@ -89,7 +89,7 @@ end
 function GeminiAPI.sendRequest(promptText)
 	local apiKey = GeminiAPI.API_KEY
 	if apiKey == "" then
-		return nil, "API Key not set in Zentry/Modules/GeminiAPI.lua. Please replace YOUR_API_KEY_HERE with your actual Gemini API key."
+		return nil, "API Key not set in Zentry, set it in the settings Gemini API key"
 	end
 
 	local fullApiUrl = GeminiAPI.API_URL .. apiKey
