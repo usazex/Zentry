@@ -478,4 +478,3 @@ function UI.createSettingsPanel(mainFrame)
 end
 
 return UI
-
