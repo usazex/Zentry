@@ -372,6 +372,7 @@ function UI.createSettingsPanel(mainFrame)
 	settingsPanel.BackgroundColor3 = SURFACE_COLOR
 	settingsPanel.BorderColor3 = ACCENT_COLOR
 	settingsPanel.BorderSizePixel = 1
+	settingsPanel.BackgroundTransparency = 1
 	settingsPanel.Visible = false -- Initially hidden
 	settingsPanel.ZIndex = 10 -- Ensure it's above other elements if overlapping
 	settingsPanel.Parent = mainFrame
@@ -454,12 +455,10 @@ function UI.createSettingsPanel(mainFrame)
 	local toggleHolderLayout = Instance.new("UIListLayout")
 	toggleHolderLayout.FillDirection = Enum.FillDirection.Horizontal
 	toggleHolderLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	toggleHolderLayout.HorizontalAlignment = Enum.HorizontalAlignment.SpaceBetween --This will push them apart
+	toggleHolderLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center -- FIXED: was SpaceBetween, which is invalid
 	toggleHolderLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	toggleHolderLayout.Padding = UDim.new(0, 10) -- Add some space between label and toggle
 	toggleHolderLayout.Parent = toggleHolder
-
-	apiKeyLabel.Parent = settingsPanel -- already done
-	apiKeyInput.Parent = settingsPanel -- already done
 
 	autoApproverLabel.Parent = toggleHolder
 	autoApproverToggle.Parent = toggleHolder
@@ -479,3 +478,4 @@ function UI.createSettingsPanel(mainFrame)
 end
 
 return UI
+
