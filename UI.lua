@@ -1,20 +1,50 @@
 --UI.lua Module script
 local UI = {}
 
--- Constants
+-- Enhanced Constants with better color palette
 local ACCENT_COLOR = Color3.fromRGB(0, 122, 255)
+local ACCENT_HOVER = Color3.fromRGB(30, 144, 255)
 local BACKGROUND_COLOR = Color3.fromRGB(28, 28, 30)
 local SURFACE_COLOR = Color3.fromRGB(44, 44, 46)
+local ELEVATED_SURFACE = Color3.fromRGB(58, 58, 60)
 local TEXT_COLOR = Color3.fromRGB(255, 255, 255)
 local SUBTLE_TEXT_COLOR = Color3.fromRGB(150, 150, 150)
 local ERROR_COLOR = Color3.fromRGB(255, 59, 48)
 local SUCCESS_COLOR = Color3.fromRGB(52, 199, 89)
 local WARNING_COLOR = Color3.fromRGB(255, 204, 0)
+local BORDER_COLOR = Color3.fromRGB(70, 70, 72)
 
 local TweenService = game:GetService("TweenService")
 
 -- This will hold references to key UI elements after creation
 local uiElements = {}
+
+-- Animation helpers
+local function createFadeInTween(element, duration)
+	duration = duration or 0.2
+	element.BackgroundTransparency = 1
+	local tween = TweenService:Create(element, 
+		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{BackgroundTransparency = 0}
+	)
+	return tween
+end
+
+local function createHoverEffect(button, normalColor, hoverColor)
+	button.MouseEnter:Connect(function()
+		TweenService:Create(button, 
+			TweenInfo.new(0.1, Enum.EasingStyle.Quad), 
+			{BackgroundColor3 = hoverColor}
+		):Play()
+	end)
+
+	button.MouseLeave:Connect(function()
+		TweenService:Create(button, 
+			TweenInfo.new(0.1, Enum.EasingStyle.Quad), 
+			{BackgroundColor3 = normalColor}
+		):Play()
+	end)
+end
 
 function UI.addBubble(text, isUser, messageType)
 	if not uiElements.chatFrame or not uiElements.chatLayout then
@@ -31,13 +61,11 @@ function UI.addBubble(text, isUser, messageType)
 	local bubbleColor
 	local textColor = TEXT_COLOR
 	local textXAlignment = Enum.TextXAlignment.Left
-	local bubbleHorizontalAlignment = Enum.HorizontalAlignment.Left
 
 	if isUser then
 		bubbleColor = ACCENT_COLOR
 		textColor = Color3.fromRGB(255,255,255)
 		textXAlignment = Enum.TextXAlignment.Right
-		bubbleHorizontalAlignment = Enum.HorizontalAlignment.Right
 	else
 		bubbleColor = SURFACE_COLOR
 		if messageType == "error" then
@@ -48,17 +76,15 @@ function UI.addBubble(text, isUser, messageType)
 			textColor = Color3.fromRGB(255,255,255)
 		elseif messageType == "warning" then
 			bubbleColor = WARNING_COLOR
-			textColor = BACKGROUND_COLOR -- Text on yellow warning
-		elseif messageType == "info" then -- Added info type
-			bubbleColor = ACCENT_COLOR -- Or another distinct color like a light blue
+			textColor = BACKGROUND_COLOR
+		elseif messageType == "info" then
+			bubbleColor = ACCENT_COLOR
 			textColor = Color3.fromRGB(255,255,255)
 		elseif messageType == "thinking" then
 			bubbleColor = SURFACE_COLOR
 			textColor = SUBTLE_TEXT_COLOR
 		end
 	end
-
-	-- bubble.HorizontalAlignment = bubbleHorizontalAlignment -- REMOVE this line, not valid for Frame
 
 	local contentFrame = Instance.new("Frame")
 	contentFrame.BackgroundColor3 = bubbleColor
@@ -83,31 +109,20 @@ function UI.addBubble(text, isUser, messageType)
 	label.TextSize = 15
 	label.Font = Enum.Font.GothamMedium
 	label.TextColor3 = textColor
-	label.Size = UDim2.new(1, -24, 0,0) -- Max width for text before wrapping, adjusted for padding
+	label.Size = UDim2.new(1, -24, 0, 0)
 	label.AutomaticSize = Enum.AutomaticSize.Y
 	label.TextXAlignment = textXAlignment
 	label.Parent = contentFrame
 
 	bubble.Parent = uiElements.chatFrame
 
-	contentFrame.Size = UDim2.fromScale(0.95, 0.8)
-	contentFrame.BackgroundTransparency = 0.5
-	local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-	local goal = { BackgroundTransparency = 0 } -- Size will be handled by AutomaticSize
-	local tween = TweenService:Create(contentFrame, tweenInfo, goal)
+	-- Enhanced animation
+	local tween = createFadeInTween(contentFrame, 0.3)
 	tween:Play()
-
-	-- Set alignment on the layout object, not the Frame
-	if uiElements.chatLayout then
-		if isUser then
-			uiElements.chatLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-		else
-			uiElements.chatLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-		end
-	end
 
 	task.wait(0.05)
 	uiElements.chatFrame.CanvasPosition = Vector2.new(0, uiElements.chatFrame.AbsoluteCanvasSize.Y)
+
 	return bubble
 end
 
@@ -123,25 +138,23 @@ function UI.createTaskCard(taskData, taskIndex, onApplyCallback)
 	taskCard.Size = UDim2.new(0.95, 0, 0, 0)
 	taskCard.AutomaticSize = Enum.AutomaticSize.Y
 	taskCard.BorderSizePixel = 1
-	taskCard.BorderColor3 = Color3.fromRGB(60,60,60)
+	taskCard.BorderColor3 = BORDER_COLOR
 	taskCard.LayoutOrder = #uiElements.chatFrame:GetChildren() + 1
-	-- taskCard.HorizontalAlignment = Enum.HorizontalAlignment.Center -- REMOVE this line, not valid for Frame
 
 	local cardCorner = Instance.new("UICorner")
 	cardCorner.CornerRadius = UDim.new(0, 8)
 	cardCorner.Parent = taskCard
 
 	local cardLayout = Instance.new("UIListLayout")
-	cardLayout.Padding = UDim.new(0,8)
+	cardLayout.Padding = UDim.new(0, 8)
 	cardLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	cardLayout.Parent = taskCard
-	cardLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center -- Set alignment on layout
 
 	local cardPadding = Instance.new("UIPadding")
-	cardPadding.PaddingTop = UDim.new(0,10)
-	cardPadding.PaddingBottom = UDim.new(0,10)
-	cardPadding.PaddingLeft = UDim.new(0,10)
-	cardPadding.PaddingRight = UDim.new(0,10)
+	cardPadding.PaddingTop = UDim.new(0, 15)
+	cardPadding.PaddingBottom = UDim.new(0, 15)
+	cardPadding.PaddingLeft = UDim.new(0, 15)
+	cardPadding.PaddingRight = UDim.new(0, 15)
 	cardPadding.Parent = taskCard
 
 	local nameLabel = Instance.new("TextLabel")
@@ -173,21 +186,21 @@ function UI.createTaskCard(taskData, taskIndex, onApplyCallback)
 	local detailsFrame = Instance.new("Frame")
 	detailsFrame.Name = "DetailsFrame"
 	detailsFrame.BackgroundTransparency = 1
-	detailsFrame.Size = UDim2.new(1,0,0,20)
-	detailsFrame.AutomaticSize = Enum.AutomaticSize.X -- Should be Y for height or X for width based on content
+	detailsFrame.Size = UDim2.new(1, 0, 0, 20)
+	detailsFrame.AutomaticSize = Enum.AutomaticSize.Y
 	detailsFrame.LayoutOrder = 3
 	detailsFrame.Parent = taskCard
 
 	local detailsLayout = Instance.new("UIListLayout")
 	detailsLayout.FillDirection = Enum.FillDirection.Horizontal
 	detailsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	detailsLayout.Padding = UDim.new(0,10)
+	detailsLayout.Padding = UDim.new(0, 15)
 	detailsLayout.Parent = detailsFrame
 
 	local actionLabel = Instance.new("TextLabel")
 	actionLabel.Name = "ActionLabel"
 	actionLabel.BackgroundTransparency = 1
-	actionLabel.Text = "▶️ Action: " .. (taskData.action or "N/A")
+	actionLabel.Text = "▶️ " .. (taskData.action or "N/A")
 	actionLabel.Font = Enum.Font.GothamMedium
 	actionLabel.TextColor3 = SUBTLE_TEXT_COLOR
 	actionLabel.TextSize = 13
@@ -198,7 +211,7 @@ function UI.createTaskCard(taskData, taskIndex, onApplyCallback)
 	local locationLabel = Instance.new("TextLabel")
 	locationLabel.Name = "LocationLabel"
 	locationLabel.BackgroundTransparency = 1
-	locationLabel.Text = "📍 Location: " .. (taskData.location or "N/A")
+	locationLabel.Text = "📍 " .. (taskData.location or "N/A")
 	locationLabel.Font = Enum.Font.GothamMedium
 	locationLabel.TextColor3 = SUBTLE_TEXT_COLOR
 	locationLabel.TextSize = 13
@@ -208,40 +221,47 @@ function UI.createTaskCard(taskData, taskIndex, onApplyCallback)
 
 	local applyBtn = Instance.new("TextButton")
 	applyBtn.Name = "ApplyButton"
-	applyBtn.Size = UDim2.new(0, 100, 0, 32)
+	applyBtn.Size = UDim2.new(0, 120, 0, 35)
 	applyBtn.Text = "Apply ✨"
 	applyBtn.Font = Enum.Font.GothamBold
 	applyBtn.TextSize = 14
-	applyBtn.TextColor3 = Color3.fromRGB(255,255,255)
+	applyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	applyBtn.BackgroundColor3 = SUCCESS_COLOR
 	applyBtn.LayoutOrder = 4
-	-- applyBtn.HorizontalAlignment = Enum.HorizontalAlignment.Right -- REMOVE this line, not valid for TextButton
 
 	local btnCorner = Instance.new("UICorner")
-	btnCorner.CornerRadius = UDim.new(0,6)
+	btnCorner.CornerRadius = UDim.new(0, 8)
 	btnCorner.Parent = applyBtn
+
+	-- Enhanced button hover effect
+	createHoverEffect(applyBtn, SUCCESS_COLOR, SUCCESS_COLOR:Lerp(Color3.new(1, 1, 1), 0.1))
+
 	applyBtn.Parent = taskCard
 
 	applyBtn.MouseButton1Click:Connect(function()
 		if onApplyCallback then
-			onApplyCallback(taskData, applyBtn) -- Pass button for UI updates
+			onApplyCallback(taskData, applyBtn)
 		end
 	end)
 
 	taskCard.Parent = uiElements.chatFrame
 
+	-- Animate card appearance
+	local tween = createFadeInTween(taskCard, 0.3)
+	tween:Play()
+
 	task.wait(0.05)
 	uiElements.chatFrame.CanvasPosition = Vector2.new(0, uiElements.chatFrame.AbsoluteCanvasSize.Y)
+
 	return taskCard
 end
 
-
 function UI.createLayout(widgetInstance)
-	uiElements = {} -- Clear previous elements if any (for potential re-runs, though unlikely for plugins)
+	uiElements = {}
 
 	local mainFrame = Instance.new("Frame")
 	mainFrame.Name = "MainFrame"
-	mainFrame.Size = UDim2.new(1,0,1,0)
+	mainFrame.Size = UDim2.new(1, 0, 1, 0)
 	mainFrame.BackgroundColor3 = BACKGROUND_COLOR
 	mainFrame.BorderSizePixel = 0
 	mainFrame.Parent = widgetInstance
@@ -255,128 +275,229 @@ function UI.createLayout(widgetInstance)
 	mainLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	mainLayout.Parent = mainFrame
 
+	-- Enhanced Title Bar
 	local titleBar = Instance.new("Frame")
 	titleBar.Name = "TitleBar"
-	titleBar.Size = UDim2.new(1, -20, 0, 40)
-	titleBar.BackgroundColor3 = SURFACE_COLOR
+	titleBar.Size = UDim2.new(1, -20, 0, 50)
+	titleBar.BackgroundColor3 = ELEVATED_SURFACE
 	titleBar.LayoutOrder = 1
 	titleBar.Parent = mainFrame
-	local tc = Instance.new("UICorner"); tc.CornerRadius = UDim.new(0,8); tc.Parent = titleBar;
+
+	local titleCorner = Instance.new("UICorner")
+	titleCorner.CornerRadius = UDim.new(0, 12)
+	titleCorner.Parent = titleBar
+
+	local titlePadding = Instance.new("UIPadding")
+	titlePadding.PaddingLeft = UDim.new(0, 15)
+	titlePadding.PaddingRight = UDim.new(0, 15)
+	titlePadding.Parent = titleBar
+
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.Name = "TitleLabel"
-	titleLabel.Size = UDim2.new(1, -20, 1, 0); titleLabel.Position = UDim2.new(0, 10, 0, 0)
-	titleLabel.BackgroundTransparency = 1; titleLabel.Text = "AI Vibe Coder ✨"
-	titleLabel.TextColor3 = ACCENT_COLOR; titleLabel.TextSize = 20
-	titleLabel.Font = Enum.Font.GothamBold; titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.Size = UDim2.new(1, -60, 1, 0)
+	titleLabel.Position = UDim2.new(0, 0, 0, 0)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Text = "AI Vibe Coder ✨"
+	titleLabel.TextColor3 = ACCENT_COLOR
+	titleLabel.TextSize = 22
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = titleBar
 	uiElements.titleLabel = titleLabel
 
+	-- Enhanced Settings Button
 	local settingsButton = Instance.new("TextButton")
 	settingsButton.Name = "SettingsButton"
-	settingsButton.Size = UDim2.new(0, 30, 0, 30) -- Square button for icon
-	settingsButton.Position = UDim2.new(1, -40, 0, 5) -- Position to the right of the title bar
-	settingsButton.Text = "⚙️" -- Gear icon (Unicode)
+	settingsButton.Size = UDim2.new(0, 40, 0, 40)
+	settingsButton.Position = UDim2.new(1, -50, 0, 5)
+	settingsButton.Text = "⚙️"
 	settingsButton.TextSize = 20
 	settingsButton.TextColor3 = TEXT_COLOR
-	settingsButton.BackgroundTransparency = 1
+	settingsButton.BackgroundColor3 = SURFACE_COLOR
 	settingsButton.Font = Enum.Font.GothamBold
 	settingsButton.Parent = titleBar
+
+	local settingsCorner = Instance.new("UICorner")
+	settingsCorner.CornerRadius = UDim.new(0, 8)
+	settingsCorner.Parent = settingsButton
+
+	createHoverEffect(settingsButton, SURFACE_COLOR, ELEVATED_SURFACE)
 	uiElements.settingsButton = settingsButton
 
-	-- File Explorer (Placeholder - to be implemented later)
-	local fileExplorerFrame = Instance.new("Frame")
-	fileExplorerFrame.Name = "FileExplorerFrame"
-	fileExplorerFrame.Size = UDim2.new(1, -20, 0, 150); fileExplorerFrame.BackgroundColor3 = SURFACE_COLOR
-	fileExplorerFrame.Visible = false; fileExplorerFrame.LayoutOrder = 2; fileExplorerFrame.Parent = mainFrame
-	local fec = Instance.new("UICorner"); fec.CornerRadius = UDim.new(0,8); fec.Parent = fileExplorerFrame;
-	-- ... (file explorer contents would go here if it were functional) ...
-	uiElements.fileExplorerFrame = fileExplorerFrame
-
+	-- Chat Frame
 	local chatFrame = Instance.new("ScrollingFrame")
 	chatFrame.Name = "ChatFrame"
-	chatFrame.Size = UDim2.new(1, -20, 1, -120)
-	chatFrame.BackgroundColor3 = BACKGROUND_COLOR; chatFrame.BorderSizePixel = 0
-	chatFrame.CanvasSize = UDim2.new(0,0,0,0); chatFrame.ScrollBarThickness = 8
-	chatFrame.ScrollBarImageColor3 = ACCENT_COLOR; chatFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	chatFrame.LayoutOrder = 3; chatFrame.Parent = mainFrame
+	chatFrame.Size = UDim2.new(1, -20, 1, -140)
+	chatFrame.BackgroundColor3 = SURFACE_COLOR
+	chatFrame.BorderSizePixel = 0
+	chatFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+	chatFrame.ScrollBarThickness = 6
+	chatFrame.ScrollBarImageColor3 = ACCENT_COLOR
+	chatFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	chatFrame.LayoutOrder = 2
+	chatFrame.Parent = mainFrame
+
+	local chatCorner = Instance.new("UICorner")
+	chatCorner.CornerRadius = UDim.new(0, 12)
+	chatCorner.Parent = chatFrame
+
+	local chatPadding = Instance.new("UIPadding")
+	chatPadding.PaddingTop = UDim.new(0, 10)
+	chatPadding.PaddingBottom = UDim.new(0, 10)
+	chatPadding.PaddingLeft = UDim.new(0, 10)
+	chatPadding.PaddingRight = UDim.new(0, 10)
+	chatPadding.Parent = chatFrame
+
 	uiElements.chatFrame = chatFrame
 
 	local chatLayout = Instance.new("UIListLayout")
 	chatLayout.Name = "ChatLayout"
-	chatLayout.Padding = UDim.new(0, 8); chatLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	chatLayout.Padding = UDim.new(0, 10)
+	chatLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	chatLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	chatLayout.Parent = chatFrame
 	uiElements.chatLayout = chatLayout
 
+	-- Enhanced Input Frame
 	local inputFrame = Instance.new("Frame")
 	inputFrame.Name = "InputFrame"
-	inputFrame.Size = UDim2.new(1, -20, 0, 60); inputFrame.BackgroundColor3 = SURFACE_COLOR
-	inputFrame.LayoutOrder = 4; inputFrame.Visible = true; inputFrame.Parent = mainFrame
-	local ifc = Instance.new("UICorner"); ifc.CornerRadius = UDim.new(0,8); ifc.Parent = inputFrame;
+	inputFrame.Size = UDim2.new(1, -20, 0, 70)
+	inputFrame.BackgroundColor3 = ELEVATED_SURFACE
+	inputFrame.LayoutOrder = 3
+	inputFrame.Parent = mainFrame
+
+	local inputCorner = Instance.new("UICorner")
+	inputCorner.CornerRadius = UDim.new(0, 12)
+	inputCorner.Parent = inputFrame
+
+	local inputPadding = Instance.new("UIPadding")
+	inputPadding.PaddingTop = UDim.new(0, 10)
+	inputPadding.PaddingBottom = UDim.new(0, 10)
+	inputPadding.PaddingLeft = UDim.new(0, 15)
+	inputPadding.PaddingRight = UDim.new(0, 15)
+	inputPadding.Parent = inputFrame
+
 	uiElements.inputFrame = inputFrame
 
 	local inputBox = Instance.new("TextBox")
 	inputBox.Name = "InputBox"
-	inputBox.Size = UDim2.new(1, -100, 0, 40); inputBox.Position = UDim2.new(0, 10, 0, 10)
-	inputBox.PlaceholderText = "Tell the AI what to code..."; inputBox.Text = ""
-	inputBox.TextSize = 16; inputBox.Font = Enum.Font.GothamMedium
-	inputBox.TextColor3 = TEXT_COLOR; inputBox.BackgroundColor3 = BACKGROUND_COLOR
-	inputBox.ClearTextOnFocus = false; inputBox.MultiLine = true; inputBox.TextWrapped = true
-	local ibs = Instance.new("UIStroke"); ibs.Color = ACCENT_COLOR; ibs.Thickness = 0; ibs.Parent = inputBox;
-	local ibc = Instance.new("UICorner"); ibc.CornerRadius = UDim.new(0,6); ibc.Parent = inputBox;
+	inputBox.Size = UDim2.new(1, -110, 0, 50)
+	inputBox.Position = UDim2.new(0, 0, 0, 0)
+	inputBox.PlaceholderText = "Tell the AI what to code..."
+	inputBox.Text = ""
+	inputBox.TextSize = 16
+	inputBox.Font = Enum.Font.GothamMedium
+	inputBox.TextColor3 = TEXT_COLOR
+	inputBox.BackgroundColor3 = BACKGROUND_COLOR
+	inputBox.ClearTextOnFocus = false
+	inputBox.MultiLine = true
+	inputBox.TextWrapped = true
+	inputBox.TextXAlignment = Enum.TextXAlignment.Left
+	inputBox.TextYAlignment = Enum.TextYAlignment.Top
+
+	local inputBoxCorner = Instance.new("UICorner")
+	inputBoxCorner.CornerRadius = UDim.new(0, 8)
+	inputBoxCorner.Parent = inputBox
+
+	local inputBoxPadding = Instance.new("UIPadding")
+	inputBoxPadding.PaddingTop = UDim.new(0, 10)
+	inputBoxPadding.PaddingBottom = UDim.new(0, 10)
+	inputBoxPadding.PaddingLeft = UDim.new(0, 12)
+	inputBoxPadding.PaddingRight = UDim.new(0, 12)
+	inputBoxPadding.Parent = inputBox
+
+	local inputStroke = Instance.new("UIStroke")
+	inputStroke.Color = ACCENT_COLOR
+	inputStroke.Thickness = 0
+	inputStroke.Parent = inputBox
+
 	inputBox.Parent = inputFrame
 	uiElements.inputBox = inputBox
-	uiElements.inputBoxStroke = ibs -- Store stroke for focus effect
+	uiElements.inputBoxStroke = inputStroke
 
-	inputBox.Focused:Connect(function() ibs.Thickness = 1.5 end)
-	inputBox.FocusLost:Connect(function() ibs.Thickness = 0 end)
+	inputBox.Focused:Connect(function()
+		TweenService:Create(inputStroke, TweenInfo.new(0.2), {Thickness = 2}):Play()
+	end)
+	inputBox.FocusLost:Connect(function()
+		TweenService:Create(inputStroke, TweenInfo.new(0.2), {Thickness = 0}):Play()
+	end)
 
+	-- Enhanced Send Button
 	local sendButton = Instance.new("TextButton")
 	sendButton.Name = "SendButton"
-	sendButton.Size = UDim2.new(0, 80, 0, 40); sendButton.Position = UDim2.new(1, -90, 0, 10)
-	sendButton.Text = "Send"; sendButton.TextSize = 16; sendButton.Font = Enum.Font.GothamBold
-	sendButton.TextColor3 = Color3.fromRGB(255,255,255); sendButton.BackgroundColor3 = ACCENT_COLOR
-	sendButton.Visible = true
-	local sbc = Instance.new("UICorner"); sbc.CornerRadius = UDim.new(0,6); sbc.Parent = sendButton;
+	sendButton.Size = UDim2.new(0, 90, 0, 50)
+	sendButton.Position = UDim2.new(1, -90, 0, 0)
+	sendButton.Text = "Send ✨"
+	sendButton.TextSize = 16
+	sendButton.Font = Enum.Font.GothamBold
+	sendButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	sendButton.BackgroundColor3 = ACCENT_COLOR
 	sendButton.Parent = inputFrame
+
+	local sendCorner = Instance.new("UICorner")
+	sendCorner.CornerRadius = UDim.new(0, 8)
+	sendCorner.Parent = sendButton
+
+	createHoverEffect(sendButton, ACCENT_COLOR, ACCENT_HOVER)
 	uiElements.sendButton = sendButton
 
-	local baseSendColor = sendButton.BackgroundColor3
-	sendButton.MouseEnter:Connect(function() sendButton.BackgroundColor3 = baseSendColor:Lerp(Color3.new(0,0,0), 0.15) end)
-	sendButton.MouseLeave:Connect(function() sendButton.BackgroundColor3 = baseSendColor end)
+	-- Create the settings panel
+	UI.createSettingsPanel(mainFrame)
 
-	-- Create and store the settings panel
-	UI.createSettingsPanel(mainFrame) -- This will store it in uiElements.settingsPanel
-
+	-- Connect settings button
 	if uiElements.settingsButton and uiElements.settingsPanel then
 		uiElements.settingsButton.MouseButton1Click:Connect(function()
-			uiElements.settingsPanel.Visible = not uiElements.settingsPanel.Visible
-			if uiElements.settingsPanel.Visible then
-				-- Optional: Adjust layout order or ZIndex if needed to ensure it's on top
-				uiElements.settingsPanel.ZIndex = 10 -- Make sure it's high
-				-- Bring to front (not a direct property, but ZIndex helps, and it's parented to mainFrame)
+			local isVisible = uiElements.settingsPanel.Visible
+			uiElements.settingsPanel.Visible = not isVisible
+
+			if not isVisible then
+				-- Animate panel appearance
+				uiElements.settingsPanel.Size = UDim2.new(1, -20, 0, 0)
+				local tween = TweenService:Create(uiElements.settingsPanel, 
+					TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+					{Size = UDim2.new(1, -20, 0, 200)}
+				)
+				tween:Play()
 			end
 		end)
 	end
 
-	return uiElements -- Return all created key elements
+	return uiElements
 end
 
 function UI.createSettingsPanel(mainFrame)
+	local TweenService = game:GetService("TweenService")
+
+	local ACCENT_COLOR = Color3.fromRGB(0, 162, 255)
+	local TEXT_COLOR = Color3.fromRGB(255, 255, 255)
+	local SUBTLE_TEXT_COLOR = Color3.fromRGB(170, 170, 170)
+	local BACKGROUND_COLOR = Color3.fromRGB(40, 40, 40)
+	local BORDER_COLOR = Color3.fromRGB(80, 80, 80)
+	local ELEVATED_SURFACE = Color3.fromRGB(30, 30, 30)
+	local ERROR_COLOR = Color3.fromRGB(200, 50, 50)
+	local SUCCESS_COLOR = Color3.fromRGB(50, 200, 50)
+
+	local function applyHoverEffect(button, baseColor, hoverColor)
+		button.MouseEnter:Connect(function()
+			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = hoverColor}):Play()
+		end)
+		button.MouseLeave:Connect(function()
+			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = baseColor}):Play()
+		end)
+	end
+
 	local settingsPanel = Instance.new("Frame")
 	settingsPanel.Name = "SettingsPanel"
-	settingsPanel.Size = UDim2.new(1, -20, 0, 150) -- Adjust size as needed
-	settingsPanel.Position = UDim2.new(0, 10, 0, 50) -- Position below the title bar
-	settingsPanel.BackgroundColor3 = SURFACE_COLOR
-	settingsPanel.BorderColor3 = ACCENT_COLOR
-	settingsPanel.BorderSizePixel = 1
-	settingsPanel.Visible = false -- Initially hidden
-	settingsPanel.ZIndex = 10 -- Ensure it's above other elements if overlapping
+	settingsPanel.Size = UDim2.new(1, -20, 0, 220) -- Increased height for input
+	settingsPanel.Position = UDim2.new(0, 10, 0, 70)
+	settingsPanel.BackgroundTransparency = 1
+	settingsPanel.BorderSizePixel = 0
+	settingsPanel.Visible = false
+	settingsPanel.ZIndex = 15
 	settingsPanel.Parent = mainFrame
-	uiElements.settingsPanel = settingsPanel
 
 	local panelCorner = Instance.new("UICorner")
-	panelCorner.CornerRadius = UDim.new(0, 8)
+	panelCorner.CornerRadius = UDim.new(0, 12)
 	panelCorner.Parent = settingsPanel
 
 	local panelLayout = Instance.new("UIListLayout")
@@ -386,95 +507,280 @@ function UI.createSettingsPanel(mainFrame)
 	panelLayout.Parent = settingsPanel
 
 	local panelPadding = Instance.new("UIPadding")
-	panelPadding.PaddingTop = UDim.new(0, 10)
-	panelPadding.PaddingBottom = UDim.new(0, 10)
-	panelPadding.PaddingLeft = UDim.new(0, 10)
-	panelPadding.PaddingRight = UDim.new(0, 10)
+	panelPadding.PaddingTop = UDim.new(0, 15)
+	panelPadding.PaddingBottom = UDim.new(0, 15)
+	panelPadding.PaddingLeft = UDim.new(0, 15)
+	panelPadding.PaddingRight = UDim.new(0, 15)
 	panelPadding.Parent = settingsPanel
 
-	-- Gemini API Key Input
+	-- Title
+	local settingsTitle = Instance.new("TextLabel")
+	settingsTitle.Name = "SettingsTitle"
+	settingsTitle.Size = UDim2.new(1, 0, 0, 22)
+	settingsTitle.Text = "⚙️ Settings"
+	settingsTitle.TextColor3 = ACCENT_COLOR
+	settingsTitle.Font = Enum.Font.GothamBold
+	settingsTitle.TextSize = 16
+	settingsTitle.TextXAlignment = Enum.TextXAlignment.Left
+	settingsTitle.BackgroundTransparency = 1
+	settingsTitle.LayoutOrder = 1
+	settingsTitle.Parent = settingsPanel
+
+	-- API Key Label
 	local apiKeyLabel = Instance.new("TextLabel")
 	apiKeyLabel.Name = "ApiKeyLabel"
-	apiKeyLabel.Size = UDim2.new(1, -20, 0, 20)
-	apiKeyLabel.Text = "Gemini API Key:"
+	apiKeyLabel.Size = UDim2.new(1, 0, 0, 18)
+	apiKeyLabel.Text = "🔑 Gemini API Key"
 	apiKeyLabel.TextColor3 = TEXT_COLOR
 	apiKeyLabel.Font = Enum.Font.GothamMedium
+	apiKeyLabel.TextSize = 13
 	apiKeyLabel.TextXAlignment = Enum.TextXAlignment.Left
 	apiKeyLabel.BackgroundTransparency = 1
-	apiKeyLabel.LayoutOrder = 1
+	apiKeyLabel.LayoutOrder = 2
 	apiKeyLabel.Parent = settingsPanel
 
 	local apiKeyInput = Instance.new("TextBox")
 	apiKeyInput.Name = "ApiKeyInput"
-	apiKeyInput.Size = UDim2.new(1, -20, 0, 30)
-	apiKeyInput.PlaceholderText = "Enter your Gemini API Key"
+	apiKeyInput.Size = UDim2.new(1, 0, 0, 30)
+	apiKeyInput.PlaceholderText = "Enter your Gemini API Key..."
+	apiKeyInput.PlaceholderColor3 = SUBTLE_TEXT_COLOR
+	apiKeyInput.Text = ""
 	apiKeyInput.TextColor3 = TEXT_COLOR
 	apiKeyInput.BackgroundColor3 = BACKGROUND_COLOR
 	apiKeyInput.Font = Enum.Font.Gotham
-	apiKeyInput.LayoutOrder = 2
-	local apiKeyInputCorner = Instance.new("UICorner"); apiKeyInputCorner.CornerRadius = UDim.new(0,6); apiKeyInputCorner.Parent = apiKeyInput;
+	apiKeyInput.TextSize = 13
+	apiKeyInput.TextXAlignment = Enum.TextXAlignment.Left
+	apiKeyInput.ClearTextOnFocus = false
+	apiKeyInput.LayoutOrder = 3
 	apiKeyInput.Parent = settingsPanel
-	uiElements.apiKeyInput = apiKeyInput
 
-	-- Auto Approver Toggle
+	local apiKeyCorner = Instance.new("UICorner")
+	apiKeyCorner.CornerRadius = UDim.new(0, 8)
+	apiKeyCorner.Parent = apiKeyInput
+
+	local apiKeyPadding = Instance.new("UIPadding")
+	apiKeyPadding.PaddingLeft = UDim.new(0, 12)
+	apiKeyPadding.PaddingRight = UDim.new(0, 12)
+	apiKeyPadding.Parent = apiKeyInput
+
+	local apiKeyStroke = Instance.new("UIStroke")
+	apiKeyStroke.Color = BORDER_COLOR
+	apiKeyStroke.Thickness = 1
+	apiKeyStroke.Parent = apiKeyInput
+
+	apiKeyInput.Focused:Connect(function()
+		TweenService:Create(apiKeyStroke, TweenInfo.new(0.2), {Color = ACCENT_COLOR}):Play()
+	end)
+	apiKeyInput.FocusLost:Connect(function()
+		TweenService:Create(apiKeyStroke, TweenInfo.new(0.2), {Color = BORDER_COLOR}):Play()
+	end)
+
+	-- Toggle Label
 	local autoApproverLabel = Instance.new("TextLabel")
 	autoApproverLabel.Name = "AutoApproverLabel"
-	autoApproverLabel.Size = UDim2.new(0.7, 0, 0, 20)
-	autoApproverLabel.Text = "Auto Approve Changes:"
+	autoApproverLabel.Size = UDim2.new(1, 0, 0, 18)
+	autoApproverLabel.Text = "🤖 Auto Approve Changes"
 	autoApproverLabel.TextColor3 = TEXT_COLOR
 	autoApproverLabel.Font = Enum.Font.GothamMedium
+	autoApproverLabel.TextSize = 13
 	autoApproverLabel.TextXAlignment = Enum.TextXAlignment.Left
 	autoApproverLabel.BackgroundTransparency = 1
-	autoApproverLabel.LayoutOrder = 3
-	--autoApproverLabel.Parent = settingsPanel -- Will be parented to a holder frame
+	autoApproverLabel.LayoutOrder = 4
+	autoApproverLabel.Parent = settingsPanel
+
+	-- Toggle Row
+	local toggleRow = Instance.new("Frame")
+	toggleRow.Name = "ToggleRow"
+	toggleRow.Size = UDim2.new(1, 0, 0, 32)
+	toggleRow.BackgroundTransparency = 1
+	toggleRow.LayoutOrder = 5
+	toggleRow.Parent = settingsPanel
+
+	local toggleLayout = Instance.new("UIListLayout")
+	toggleLayout.FillDirection = Enum.FillDirection.Horizontal
+	toggleLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	toggleLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	toggleLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	toggleLayout.Padding = UDim.new(0, 8)
+	toggleLayout.Parent = toggleRow
+
+	local toggleDescription = Instance.new("TextLabel")
+	toggleDescription.Name = "ToggleDescription"
+	toggleDescription.Size = UDim2.new(1, -90, 1, 0)
+	toggleDescription.Text = "Auto-apply AI suggestions"
+	toggleDescription.TextColor3 = SUBTLE_TEXT_COLOR
+	toggleDescription.Font = Enum.Font.Gotham
+	toggleDescription.TextSize = 11
+	toggleDescription.TextXAlignment = Enum.TextXAlignment.Left
+	toggleDescription.BackgroundTransparency = 1
+	toggleDescription.Parent = toggleRow
 
 	local autoApproverToggle = Instance.new("TextButton")
 	autoApproverToggle.Name = "AutoApproverToggle"
-	autoApproverToggle.Size = UDim2.new(0.25, 0, 0, 25) -- Smaller button
-	autoApproverToggle.Text = "OFF" -- Initial state
-	autoApproverToggle.TextColor3 = TEXT_COLOR
-	autoApproverToggle.BackgroundColor3 = ERROR_COLOR -- Red for OFF
+	autoApproverToggle.Size = UDim2.new(0, 70, 0, 28)
+	autoApproverToggle.Text = "OFF"
+	autoApproverToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+	autoApproverToggle.BackgroundColor3 = ERROR_COLOR
 	autoApproverToggle.Font = Enum.Font.GothamBold
-	autoApproverToggle.LayoutOrder = 4
-	local toggleCorner = Instance.new("UICorner"); toggleCorner.CornerRadius = UDim.new(0,6); toggleCorner.Parent = autoApproverToggle;
-	--autoApproverToggle.Parent = settingsPanel -- Will be parented to a holder frame
-	uiElements.autoApproverToggle = autoApproverToggle
-	uiElements.autoApproverLabel = autoApproverLabel -- Store label too for convenience
+	autoApproverToggle.TextSize = 12
+	autoApproverToggle.Parent = toggleRow
 
-	-- Frame to hold label and toggle side-by-side
-	local toggleHolder = Instance.new("Frame")
-	toggleHolder.Name = "ToggleHolder"
-	toggleHolder.Size = UDim2.new(1, -20, 0, 30)
-	toggleHolder.BackgroundTransparency = 1
-	toggleHolder.LayoutOrder = 3
-	toggleHolder.Parent = settingsPanel
+	local toggleCorner = Instance.new("UICorner")
+	toggleCorner.CornerRadius = UDim.new(0, 18)
+	toggleCorner.Parent = autoApproverToggle
 
-	local toggleHolderLayout = Instance.new("UIListLayout")
-	toggleHolderLayout.FillDirection = Enum.FillDirection.Horizontal
-	toggleHolderLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	toggleHolderLayout.HorizontalAlignment = Enum.HorizontalAlignment.SpaceBetween --This will push them apart
-	toggleHolderLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	toggleHolderLayout.Parent = toggleHolder
+	-- Toggle logic
+	local isToggleOn = false
+	local function updateToggleState()
+		local newColor = isToggleOn and SUCCESS_COLOR or ERROR_COLOR
+		autoApproverToggle.Text = isToggleOn and "ON" or "OFF"
+		TweenService:Create(autoApproverToggle, TweenInfo.new(0.2), {
+			BackgroundColor3 = newColor
+		}):Play()
+		applyHoverEffect(autoApproverToggle, newColor, newColor:Lerp(Color3.new(1, 1, 1), 0.1))
+	end
 
-	apiKeyLabel.Parent = settingsPanel -- already done
-	apiKeyInput.Parent = settingsPanel -- already done
-
-	autoApproverLabel.Parent = toggleHolder
-	autoApproverToggle.Parent = toggleHolder
-
-	-- Basic toggle visual behavior
 	autoApproverToggle.MouseButton1Click:Connect(function()
-		if autoApproverToggle.Text == "OFF" then
-			autoApproverToggle.Text = "ON"
-			autoApproverToggle.BackgroundColor3 = SUCCESS_COLOR
-		else
-			autoApproverToggle.Text = "OFF"
-			autoApproverToggle.BackgroundColor3 = ERROR_COLOR
-		end
+		isToggleOn = not isToggleOn
+		updateToggleState()
 	end)
+
+	updateToggleState()
+
+	-- Store references
+	uiElements.settingsPanel = settingsPanel
+	uiElements.apiKeyInput = apiKeyInput
+	uiElements.autoApproverToggle = autoApproverToggle
+	uiElements.autoApproverLabel = autoApproverLabel
 
 	return settingsPanel
 end
 
-return UI
 
+-- Additional utility functions for better UX
+function UI.showNotification(message, messageType, duration)
+	duration = duration or 3
+
+	if not uiElements.mainFrame then
+		return
+	end
+
+	local notification = Instance.new("Frame")
+	notification.Name = "Notification"
+	notification.Size = UDim2.new(0, 300, 0, 50)
+	notification.Position = UDim2.new(1, -320, 0, 20)
+	notification.BackgroundColor3 = messageType == "error" and ERROR_COLOR or 
+		messageType == "success" and SUCCESS_COLOR or 
+		messageType == "warning" and WARNING_COLOR or 
+		ACCENT_COLOR
+	notification.BorderSizePixel = 0
+	notification.ZIndex = 20
+	notification.Parent = uiElements.mainFrame
+
+	local notifCorner = Instance.new("UICorner")
+	notifCorner.CornerRadius = UDim.new(0, 8)
+	notifCorner.Parent = notification
+
+	local notifLabel = Instance.new("TextLabel")
+	notifLabel.Size = UDim2.new(1, -20, 1, 0)
+	notifLabel.Position = UDim2.new(0, 10, 0, 0)
+	notifLabel.BackgroundTransparency = 1
+	notifLabel.Text = message
+	notifLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	notifLabel.Font = Enum.Font.GothamMedium
+	notifLabel.TextSize = 14
+	notifLabel.TextXAlignment = Enum.TextXAlignment.Left
+	notifLabel.TextWrapped = true
+	notifLabel.Parent = notification
+
+	-- Animate in
+	notification.Position = UDim2.new(1, 0, 0, 20)
+	TweenService:Create(notification, 
+		TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{Position = UDim2.new(1, -320, 0, 20)}
+	):Play()
+
+	-- Auto dismiss
+	task.wait(duration)
+	TweenService:Create(notification, 
+		TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		{Position = UDim2.new(1, 0, 0, 20)}
+	):Play()
+
+	task.wait(0.3)
+	notification:Destroy()
+end
+
+function UI.updateSettingsVisibility(isVisible)
+	if uiElements.settingsPanel then
+		uiElements.settingsPanel.Visible = isVisible
+	end
+end
+
+function UI.getApiKey()
+	if uiElements.apiKeyInput then
+		return uiElements.apiKeyInput.Text
+	end
+	return ""
+end
+
+function UI.setApiKey(key)
+	if uiElements.apiKeyInput then
+		uiElements.apiKeyInput.Text = key
+	end
+end
+
+function UI.getAutoApproverState()
+	if uiElements.autoApproverToggle then
+		return uiElements.autoApproverToggle.Text == "ON"
+	end
+	return false
+end
+
+function UI.setAutoApproverState(enabled)
+	if uiElements.autoApproverToggle then
+		uiElements.autoApproverToggle.Text = enabled and "ON" or "OFF"
+		uiElements.autoApproverToggle.BackgroundColor3 = enabled and SUCCESS_COLOR or ERROR_COLOR
+	end
+end
+
+-- Enhanced input handling
+function UI.setupInputHandlers()
+	if uiElements.inputBox and uiElements.sendButton then
+		-- Enter key to send
+		uiElements.inputBox.FocusLost:Connect(function(enterPressed)
+			if enterPressed and uiElements.inputBox.Text ~= "" then
+				uiElements.sendButton.MouseButton1Click:Fire()
+			end
+		end)
+
+		-- Auto-resize input box based on content
+		uiElements.inputBox:GetPropertyChangedSignal("Text"):Connect(function()
+			local textService = game:GetService("TextService")
+			local textSize = textService:GetTextSize(
+				uiElements.inputBox.Text,
+				uiElements.inputBox.TextSize,
+				uiElements.inputBox.Font,
+				Vector2.new(uiElements.inputBox.AbsoluteSize.X - 24, math.huge)
+			)
+
+			local newHeight = math.max(50, math.min(150, textSize.Y + 20))
+			uiElements.inputBox.Size = UDim2.new(1, -110, 0, newHeight)
+			uiElements.inputFrame.Size = UDim2.new(1, -20, 0, newHeight + 20)
+			uiElements.sendButton.Size = UDim2.new(0, 90, 0, newHeight)
+		end)
+	end
+end
+
+-- Initialize enhanced features
+function UI.initialize()
+	if uiElements.mainFrame then
+		UI.setupInputHandlers()
+
+		-- Add welcome message
+		task.wait(0.5)
+		UI.addBubble("Welcome to AI Vibe Coder! ✨ Configure your settings and start coding with AI assistance.", false, "info")
+	end
+end
+
+return UI
