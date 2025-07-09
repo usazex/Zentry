@@ -26,10 +26,11 @@ pluginWidget.Title = "AI Vibe Coder (Zentry)"
 local ModulesFolder = script.Parent -- Or define path if different
 
 local UI = require(script.Parent.UI)
-local GeminiAPI = require(script.Parent.GeminiAPI)
-local FileScanner = require(script.Parent.FileScanner)
-local TaskParser = require(script.Parent.TaskParser)
-local TaskApplier = require(script.Parent.TaskApplier)
+-- local GeminiAPI = require(script.Parent.GeminiAPI) -- Now used by AgentExecutor
+-- local FileScanner = require(script.Parent.FileScanner) -- Now used by AgentExecutor
+-- local TaskParser = require(script.Parent.TaskParser) -- Now used by AgentExecutor
+-- local TaskApplier = require(script.Parent.TaskApplier) -- Now used by AgentExecutor
+local AgentExecutor = require(script.Parent.AgentExecutor)
 
 
 -- Create the UI and get references to key elements
@@ -44,66 +45,22 @@ local function onSend()
 		return
 	end
 
-	UI.addBubble(promptText, true, nil) -- Let addBubble handle user type styling
-	uiElements.inputBox.Text = ""
+	UI.addBubble(promptText, true, nil) -- Display user's prompt in the UI
+	uiElements.inputBox.Text = "" -- Clear the input box
 
-	local thinkingBubble = UI.addBubble("Thinking...", false, "thinking")
+	-- The AgentExecutor will handle the rest:
+	-- - Displaying "Thinking..."
+	-- - Scanning files
+	-- - Building prompt
+	-- - Sending to AI
+	-- - Parsing tasks
+	-- - Applying tasks one by one
+	-- - Reporting progress and results to the UI
 
-	-- Fetch file structure
-	local gameFileStructure = FileScanner.getGameFileStructure()
-	print("AI Vibe Coder (Zentry): GameFileStructure fetched. Truncated sample: ", HttpService:JSONEncode(gameFileStructure):sub(1, 200)) -- Print a sample
+	-- Run the agent executor in a new coroutine so it doesn't block the main thread
+	-- This is important for UI responsiveness and to allow HttpService calls.
+	coroutine.wrap(AgentExecutor.executePrompt)(promptText)
 
-	-- Build prompt for Gemini
-	local geminiRequestPrompt = GeminiAPI.buildPrompt(promptText, gameFileStructure)
-	-- It's good practice not to print the full Gemini prompt if it's very large or contains sensitive structure details repeatedly.
-	-- We can assume buildPrompt works if fileStructure and promptText are okay.
-	print("AI Vibe Coder (Zentry): Gemini request prompt built.")
-
-	-- Send to Gemini
-	local responseText, err = GeminiAPI.sendRequest(geminiRequestPrompt)
-	print("AI Vibe Coder (Zentry): Raw AI Response Text: '", responseText, "' Error (if any):", err) -- CRITICAL PRINT
-
-	if thinkingBubble and thinkingBubble.Parent then thinkingBubble:Destroy() end
-
-	if not responseText then
-		UI.addBubble("Error communicating with AI: " .. (err or "Unknown error"), false, "error")
-		return
-	end
-
-	local tasks = TaskParser.parseTasks(responseText)
-	-- print("AI Vibe Coder (Zentry): Tasks parsed. Count: ", #tasks) -- Optional: keep for detailed debugging
-
-	if #tasks == 0 then
-		local maxResponseLengthInBubble = 200 -- Max characters of raw response to show in bubble
-		local truncatedResponse = responseText
-		if responseText and #responseText > maxResponseLengthInBubble then
-			truncatedResponse = responseText:sub(1, maxResponseLengthInBubble) .. "... (see console for full AI response)"
-		elseif not responseText then
-			truncatedResponse = "(empty or nil response from AI)"
-		end
-		UI.addBubble("No actionable tasks found in AI response. Raw AI output: '" .. truncatedResponse .. "'", false, "warning")
-		print("AI Vibe Coder (Zentry): Task parsing resulted in 0 tasks. Full AI response was: ", responseText or "(empty or nil response)")
-		return
-	end
-
-	for i, taskData in ipairs(tasks) do
-		-- For each task, create a card. The 'Apply' button on the card needs a callback.
-		UI.createTaskCard(taskData, i, function(selectedTaskData, applyButtonInstance)
-			-- This callback is executed when an "Apply" button on a task card is clicked
-			local success, message = TaskApplier.applyTask(selectedTaskData)
-			if success then
-				applyButtonInstance.Text = "Applied ✔️"
-				applyButtonInstance.BackgroundColor3 = Color3.fromRGB(80,80,80)
-				applyButtonInstance.TextColor3 = UI.SUBTLE_TEXT_COLOR or Color3.fromRGB(150,150,150) -- Access color from UI module
-				applyButtonInstance.Active = false
-				UI.addBubble("Task '" .. (selectedTaskData.name or "Unnamed") .. "': " .. message, false, "success")
-			else
-				applyButtonInstance.BackgroundColor3 = UI.ERROR_COLOR or Color3.fromRGB(255,59,48)
-				applyButtonInstance.Text = "Failed ❌"
-				UI.addBubble("Task '" .. (selectedTaskData.name or "Unnamed") .. "' failed: " .. message, false, "error")
-			end
-		end)
-	end
 end
 
 -- Connect Send Button
